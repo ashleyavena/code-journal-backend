@@ -39,7 +39,7 @@ export function EntryForm() {
       }
     }
     if (isEditing) load(+entryId);
-  }, [entryId]);
+  }, [entryId, isEditing]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
