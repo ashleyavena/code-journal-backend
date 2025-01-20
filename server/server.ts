@@ -1,13 +1,28 @@
 import 'dotenv/config';
 import pg from 'pg';
 import express from 'express';
-import { ClientError, errorMiddleware } from './lib/index.js';
+import { authMiddleware, ClientError, errorMiddleware } from './lib/index.js';
+import argon2 from 'argon2';
+import jwt from 'jsonwebtoken';
 
 type Entry = {
   entryId?: number;
   title: string;
   notes: string;
   photoUrl: string;
+};
+
+type User = {
+  userId: number;
+  username: string;
+  hashedPassword: string;
+};
+
+type Auth = {
+  user: User;
+  token: string;
+  username: string;
+  password: string;
 };
 
 const db = new pg.Pool({
@@ -20,20 +35,67 @@ const db = new pg.Pool({
 const app = express();
 app.use(express.json());
 
-app.get('/api/entries', async (req, res, next) => {
+app.post('/api/auth/sign-up', async (req, res, next) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      throw new ClientError(400, 'username and password are required fields');
+    }
+
+    const hashedPassword = await argon2.hash(password);
+    const sql = `
+      insert into "users" ("username", "hashedPassword")
+      values ($1, $2)
+      returning "userId", "username", "createdAt";
+    `;
+    const result = await db.query<User>(sql, [username, hashedPassword]);
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/auth/sign-in', async (req, res, next) => {
+  try {
+    const { username, password } = req.body as Partial<Auth>;
+    if (!username || !password) {
+      throw new ClientError(401, 'invalid login');
+    }
+
+    const sql = `
+      select "userId", "hashedPassword"
+        from "users"
+       where "username" = $1;
+    `;
+    const result = await db.query<User>(sql, [username]);
+    const user = result.rows[0];
+    if (!user) throw new ClientError(401, 'invalid login');
+    const { userId, hashedPassword } = user;
+    if (!(await argon2.verify(hashedPassword, password)))
+      throw new ClientError(401, 'invalid login');
+
+    const payload = { userId, username };
+    const token = jwt.sign(payload, hashedPassword);
+    res.json({ user: payload, token });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get('/api/entries', authMiddleware, async (req, res, next) => {
   try {
     const sql = `
       select *
         from "entries";
     `;
-    const result = await db.query<Entry>(sql);
+    const result = await db.query<Entry>(sql, [req.user?.userId]);
     res.json(result.rows);
   } catch (err) {
     next(err);
   }
 });
 
-app.get('/api/entries/:entryId', async (req, res, next) => {
+app.get('/api/entries/:entryId', authMiddleware, async (req, res, next) => {
   try {
     const { entryId } = req.params;
     if (!Number.isInteger(+entryId)) {
@@ -41,9 +103,9 @@ app.get('/api/entries/:entryId', async (req, res, next) => {
     }
     const sql = `
       select * from "entries"
-      where "entryId" = $1;
+      where "entryId" = $1 and "userId"= $2;
     `;
-    const params = [entryId];
+    const params = [entryId, req.user?.userId];
     const result = await db.query(sql, params);
     const entry = result.rows[0];
     if (!entry) throw new ClientError(404, 'Entry not found');
@@ -53,7 +115,7 @@ app.get('/api/entries/:entryId', async (req, res, next) => {
   }
 });
 
-app.post('/api/entries', async (req, res, next) => {
+app.post('/api/entries', authMiddleware, async (req, res, next) => {
   try {
     const { title, notes, photoUrl } = req.body;
     if (!title || !notes || !photoUrl) {
@@ -64,7 +126,7 @@ app.post('/api/entries', async (req, res, next) => {
         values ($1, $2, $3)
         returning *
     `;
-    const params = [title, notes, photoUrl];
+    const params = [title, notes, photoUrl, req.user?.userId];
     const result = await db.query<Entry>(sql, params);
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -72,7 +134,7 @@ app.post('/api/entries', async (req, res, next) => {
   }
 });
 
-app.put('/api/entries/:entryId', async (req, res, next) => {
+app.put('/api/entries/:entryId', authMiddleware, async (req, res, next) => {
   try {
     const { entryId } = req.params;
     const { title, notes, photoUrl } = req.body;
@@ -88,12 +150,12 @@ app.put('/api/entries/:entryId', async (req, res, next) => {
       set "title" = $1,
           "notes" = $2,
           "photoUrl" = $3
-      where "entryId" = $4
+      where "entryId" = $4 and "userId"= $5
       returning *
     `;
 
     const params = [title, notes, photoUrl, entryId];
-    const result = await db.query(sql, params);
+    const result = await db.query(sql, [params, req.user?.userId]);
     const updatedEntry = result.rows[0];
     if (!updatedEntry) {
       throw new ClientError(404, `Entry ID not found`);
@@ -104,7 +166,7 @@ app.put('/api/entries/:entryId', async (req, res, next) => {
   }
 });
 
-app.delete('/api/entries/:entryId', async (req, res, next) => {
+app.delete('/api/entries/:entryId', authMiddleware, async (req, res, next) => {
   try {
     const { entryId } = req.params;
     if (!entryId) {
@@ -112,10 +174,10 @@ app.delete('/api/entries/:entryId', async (req, res, next) => {
     }
     const sql = `
       delete from "entries"
-      where "entryId" = $1
+      where "entryId" = $1 and "userId"= $2
       returning *
     `;
-    const result = await db.query(sql, [entryId]);
+    const result = await db.query(sql, [entryId, req.user?.userId]);
     if (result.rowCount === 0) {
       throw new ClientError(404, 'Entry ID not found');
     }

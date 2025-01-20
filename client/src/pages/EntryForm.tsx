@@ -42,21 +42,29 @@ export function EntryForm() {
   }, [entryId, isEditing]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const newEntry = Object.fromEntries(formData) as unknown as Entry;
-    if (isEditing) {
-      updateEntry({ ...entry, ...newEntry });
-    } else {
-      addEntry(newEntry);
+    try {
+      event.preventDefault();
+      const formData = new FormData(event.currentTarget);
+      const newEntry = Object.fromEntries(formData) as unknown as Entry;
+      if (isEditing) {
+        updateEntry({ ...entry, ...newEntry });
+      } else {
+        addEntry(newEntry);
+      }
+      navigate('/');
+    } catch (error) {
+      alert('there was an error updating entry' + error);
     }
-    navigate('/');
   }
 
   function handleDelete() {
-    if (!entry?.entryId) throw new Error('Should never happen');
-    removeEntry(entry.entryId);
-    navigate('/');
+    try {
+      if (!entry?.entryId) throw new Error('Should never happen');
+      removeEntry(entry.entryId);
+      navigate('/');
+    } catch (error) {
+      alert('there was an error deleting entry' + error);
+    }
   }
 
   if (isLoading) return <div>Loading...</div>;
