@@ -1,5 +1,5 @@
-// import { EntryForm } from './pages/EntryForm';
-import { User } from './components/UserContext';
+import { EntryForm } from './pages/EntryForm';
+import { User, UserContext, useUser } from './components/UserContext';
 
 export type Entry = {
   entryId?: number;
@@ -38,14 +38,29 @@ export function readToken(): string | undefined {
 }
 
 export async function readEntries(): Promise<Entry[]> {
-  const response = await fetch('/api/entries', {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to fetch entries. Status: ${response.status}`);
+  const token = readToken();
+  if (!token) {
+    throw new Error('No authentication token found. Please log in.');
   }
-  return (await response.json()) as Entry[];
+  const req = {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  };
+  const res = await fetch('/api/entries', req);
+  if (!res.ok) {
+    console.error('Fetch error details:', {
+      status: res.status,
+      statusText: res.statusText,
+    });
+    throw new Error(`Failed to fetch entries. Status: ${res.status}`);
+  }
+
+  const entries = await res.json();
+  console.log('Fetched Entries:', entries); // Check the data
+  return entries as Entry[];
 }
 
 export async function readEntry(entryId: number): Promise<Entry | undefined> {
