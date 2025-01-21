@@ -142,29 +142,30 @@ app.put('/api/entries/:entryId', authMiddleware, async (req, res, next) => {
   try {
     const { entryId } = req.params;
     const { title, notes, photoUrl } = req.body;
-
     if (!title || !notes || !photoUrl) {
-      throw new ClientError(400, 'Entry is required');
+      throw new ClientError(400, 'Title, notes, and photoUrl are required');
     }
-    if (!Number.isInteger(Number(entryId))) {
-      throw new ClientError(400, 'Invalid entryId');
+    if (!Number.isInteger(+entryId)) {
+      throw new ClientError(400, 'Invalid entry ID');
     }
     const sql = `
-      update "entries"
-      set "title" = $1,
-          "notes" = $2,
-          "photoUrl" = $3
-      where "entryId" = $4 and "userId"= $5
-      returning *
+      UPDATE "entries"
+      SET "title" = $1, "notes" = $2, "photoUrl" = $3
+      WHERE "entryId" = $4 AND "userId" = $5
+      RETURNING *;
     `;
+    const params = [title, notes, photoUrl, entryId, req.user?.userId];
 
-    const params = [title, notes, photoUrl, entryId];
-    const result = await db.query(sql, [params, req.user?.userId]);
+    const result = await db.query(sql, params);
     const updatedEntry = result.rows[0];
     if (!updatedEntry) {
-      throw new ClientError(404, `Entry ID not found`);
+      throw new ClientError(
+        404,
+        'Entry not found or you are not authorized to update it'
+      );
     }
-    res.status(200).json(updatedEntry);
+
+    res.json(updatedEntry);
   } catch (err) {
     next(err);
   }
