@@ -25,6 +25,9 @@ type Auth = {
   password: string;
 };
 
+const hashKey = process.env.TOKEN_SECRET ?? '';
+if (!hashKey) throw new Error('TOKEN_SECRET not found in env');
+
 const db = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
@@ -75,7 +78,7 @@ app.post('/api/auth/sign-in', async (req, res, next) => {
       throw new ClientError(401, 'invalid login');
 
     const payload = { userId, username };
-    const token = jwt.sign(payload, hashedPassword);
+    const token = jwt.sign(payload, hashKey);
     res.json({ user: payload, token });
   } catch (err) {
     next(err);
@@ -86,7 +89,8 @@ app.get('/api/entries', authMiddleware, async (req, res, next) => {
   try {
     const sql = `
       select *
-        from "entries";
+        from "entries"
+        where "userId" = $1;
     `;
     const result = await db.query<Entry>(sql, [req.user?.userId]);
     res.json(result.rows);
@@ -122,8 +126,8 @@ app.post('/api/entries', authMiddleware, async (req, res, next) => {
       throw new ClientError(400, 'Entry is required');
     }
     const sql = `
-      insert into "entries" ("title", "notes", "photoUrl")
-        values ($1, $2, $3)
+      insert into "entries" ("title", "notes", "photoUrl", "userId")
+        values ($1, $2, $3, $4)
         returning *
     `;
     const params = [title, notes, photoUrl, req.user?.userId];
@@ -146,7 +150,7 @@ app.put('/api/entries/:entryId', authMiddleware, async (req, res, next) => {
       throw new ClientError(400, 'Invalid entryId');
     }
     const sql = `
-      update "grades"
+      update "entries"
       set "title" = $1,
           "notes" = $2,
           "photoUrl" = $3

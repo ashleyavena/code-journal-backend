@@ -1,5 +1,5 @@
 import { ReactNode, createContext, useEffect, useState } from 'react';
-import { readToken, readUser, removeAuth, saveAuth } from '../lib';
+import { readToken, readUser, removeAuth, saveAuth } from '../data';
 
 export type User = {
   userId: number;
@@ -35,6 +35,7 @@ export function UserProvider({ children }: Props) {
     setUser(user);
     setToken(token);
     saveAuth(user, token);
+    console.log('signed in');
   }
 
   function handleSignOut() {

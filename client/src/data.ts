@@ -1,5 +1,4 @@
-import { EntryForm } from './pages/EntryForm';
-import { User, UserContext, useUser } from './components/UserContext';
+import { User } from './components/UserContext';
 
 export type Entry = {
   entryId?: number;
@@ -19,6 +18,7 @@ type Auth = {
 export function saveAuth(user: User, token: string): void {
   const auth: Auth = { user, token };
   localStorage.setItem(authKey, JSON.stringify(auth));
+  console.log(user, token, "what's up");
 }
 
 export function removeAuth(): void {
@@ -38,15 +38,11 @@ export function readToken(): string | undefined {
 }
 
 export async function readEntries(): Promise<Entry[]> {
-  const token = readToken();
-  if (!token) {
-    throw new Error('No authentication token found. Please log in.');
-  }
   const req = {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${readToken()}`,
     },
   };
   const res = await fetch('/api/entries', req);
@@ -64,7 +60,12 @@ export async function readEntries(): Promise<Entry[]> {
 }
 
 export async function readEntry(entryId: number): Promise<Entry | undefined> {
-  const response = await fetch(`/api/entries/${entryId}`);
+  const response = await fetch(`/api/entries/${entryId}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${readToken()}`,
+    },
+  });
   if (!response.ok) {
     throw new Error(`Failed to fetch entry. Status: ${response.status}`);
   }
@@ -75,7 +76,10 @@ export async function readEntry(entryId: number): Promise<Entry | undefined> {
 export async function addEntry(newEntry: Entry) {
   const response = await fetch('/api/entries', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${readToken()}`,
+    },
     body: JSON.stringify(newEntry),
   });
   if (!response.ok) throw new Error(`response status ${response.status}`);
@@ -86,7 +90,10 @@ export async function addEntry(newEntry: Entry) {
 export async function updateEntry(entry: Entry) {
   const response = await fetch(`/api/entries/${entry.entryId}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${readToken()}`,
+    },
     body: JSON.stringify(entry),
   });
   if (!response.ok)
@@ -98,6 +105,9 @@ export async function updateEntry(entry: Entry) {
 export async function removeEntry(entryId: number) {
   const response = await fetch(`/api/entries/${entryId}`, {
     method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${readToken()}`,
+    },
   });
   if (!response.ok)
     throw new Error(`Failed to delete entry ${response.status}`);

@@ -31,6 +31,7 @@ export function SignInForm() {
         throw new Error(`fetch Error ${res.status}`);
       }
       const { user, token } = (await res.json()) as AuthData;
+      console.log('calling handle sign in', user, token);
       handleSignIn(user, token);
       console.log('Signed In', user);
       console.log('Received token:', token);

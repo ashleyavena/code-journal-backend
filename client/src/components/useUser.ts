@@ -5,5 +5,6 @@ export type { User } from './UserContext';
 export function useUser(): UserContextValues {
   const values = useContext(UserContext);
   if (!values) throw new Error('useUser must be used inside a UserProvider');
+  console.log('use user');
   return values;
 }
